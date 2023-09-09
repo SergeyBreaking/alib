@@ -11,7 +11,7 @@ page_links = []
 for num in range(1,34):
     page_link = f'https://www.alibaba.com/countrysearch/CN/car-auction_{num}.html'
     page_links.append(page_link)
-# print(page_links)
+print(page_links)
 for url in page_links:
 # url = 'https://www.alibaba.com/trade/search?spm=a2700.galleryofferlist.0.0.2f6c3bdaorFPJQ&tab=all&searchText=car+auction&viewtype=G'
     scrapper = SeleniumScraper()
