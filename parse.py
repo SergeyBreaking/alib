@@ -1,66 +1,45 @@
-import re
-import time
-
-import aiohttp
 from database import session_scope, create_car_table, create_car_image_table, create_all_tables
 from bs4 import BeautifulSoup as bs
-import requests
 from selenium_scrapper import SeleniumScraper
-
+import logging
+from selenium_scrapper import webdriver
 page_links = []
-for num in range(1,34):
-    page_link = f'https://www.alibaba.com/countrysearch/CN/car-auction_{num}.html'
+for num in range(1, 26):
+    # page_link = f'https://www.alibaba.com/countrysearch/CN/car-auction_{num}.html'
+    page_link = f'https://www.alibaba.com/trade/search?spm=a2700.galleryofferlist.0.0.4bf33bdadf0Uyz&fsb=y&IndexArea=product_en&keywords=car+auction&tab=all&viewtype=G&&page={num}'
     page_links.append(page_link)
-print(page_links)
+logging.warning(page_links)
+# print(page_links)
+scrapper = SeleniumScraper()
 for url in page_links:
-# url = 'https://www.alibaba.com/trade/search?spm=a2700.galleryofferlist.0.0.2f6c3bdaorFPJQ&tab=all&searchText=car+auction&viewtype=G'
-    scrapper = SeleniumScraper()
+    # url = 'https://www.alibaba.com/trade/search?spm=a2700.galleryofferlist.0.0.2f6c3bdaorFPJQ&tab=all&searchText=car+auction&viewtype=G'
     response = scrapper.get_response(url)
-    # html_content = response.text
-    # scrapper.click_element_by_xpath(xpath='//*[@id="J_SC_header"]/header/div[4]/div/div[4]/div[3]/div/div')
-    # # scrapper.hover_over_element_by_class('sc-hd-lan')
-    # scrapper.click_element_by_xpath(xpath='//*[@id="J_SC_header"]/header/div[4]/div/div[4]/div[3]/div/div/div[2]/div[3]/div/div/div[1]')
-    # scrapper.click_element_by_xpath(xpath='//*[@id="J_SC_header"]/header/div[4]/div/div[4]/div[3]/div/div/div[2]/div[3]/div/div/div[2]/ul/li[2]/ul/li[20]')
-    # scrapper.click_element_by_xpath(xpath='//*[@id="J_SC_header"]/header/div[4]/div/div[4]/div[3]/div/div/div[2]/div[5]')
     soup = bs(response, 'html.parser')
-    # print(soup)
-    # pag = soup.find('div', class_='class="l-sub-main-wrap util-clearfix')
-    # print(pag)
-
     car_links = []
     marks = []  # Список марок
     tables = {}  # Список таблиц машин
     tables_img = {}  # Список таблиц фоток
-    elements = soup.find_all(class_='search-card-e-slider__wrapper')
+    elements = soup.find_all(
+        class_='fy23-search-card fy23-gallery-card m-gallery-product-item-v2 J-search-card-wrapper')
     for element in elements:
         link_element = element.find('a')
         if link_element:
             link = link_element['href']
             cleaned_link = link.replace('//', 'https://')
             car_links.append(cleaned_link)
-    # scrapper.hover_over_element_by_class('sc-hd-lan')
-    print(car_links)
+    logging.warning(car_links)
+    # print(car_links)
     for car_link in car_links:
         # car_url = 'https://www.alibaba.com/product-detail/Fairly-Used-Mercedes-Benzs-C63-AMG_1600905109956.html?spm=a2700.pc_countrysearch.main07.13.7947230fhXb8Gy'
         car_url = car_link
         response = scrapper.get_response(car_url)
-        # print(response)
         soup = bs(response, 'html.parser')
         # print(soup)
 
-        # scrapper.click_element_by_xpath(xpath='//*[@id="J_SC_header"]/header/div[4]/div/div[4]/div[3]/div/div')
-        # scrapper.click_element_by_xpath(xpath='//*[@id="J_SC_header"]/header/div[4]/div/div[4]/div[3]/div/div/div[2]/div[3]/div/div/div[1]')
-        # scrapper.click_element_by_xpath(xpath='//*[@id="J_SC_header"]/header/div[4]/div/div[4]/div[3]/div/div/div[2]/div[3]/div/div/div[2]/ul/li[2]/ul/li[20]')
-        # scrapper.click_element_by_xpath(xpath='//*[@id="J_SC_header"]/header/div[4]/div/div[4]/div[3]/div/div/div[2]/div[5]')
-
-        # scrapper.click_element_by_class('css-1dimb5e-singleValue')
-        # print(soup)
-        # for_model = soup.find('div', class_="product-certifications")
-        # print(for_model)
-        # print(soup)
-        # car_info = soup.find('div', class_='right')
-        # print(car_info)
         attribute_lists = soup.find_all('div', class_='structure-table')
+        if not attribute_lists:
+            attribute_lists = soup.find_all('div', class_='attribute-list')
+
         marka = None
         model = None
         year = None
@@ -81,11 +60,15 @@ for url in page_links:
         # my_price = None
         for attribute_list in attribute_lists:
             attribute_items = attribute_list.find_all('div', class_='structure-row')
+            if not attribute_items:
+                attribute_items = attribute_list.find_all('div', class_='attribute-item')
 
             for attribute_item in attribute_items:
                 left_element = attribute_item.find('div', class_='col-left')
                 right_element = attribute_item.find('div', class_='col-right')
-
+                if not left_element and right_element:
+                    left_element = attribute_item.find('div', class_='left')
+                    right_element = attribute_item.find('div', class_='right')
                 model_obtained = False
 
                 if left_element and left_element.text.strip() == "Brand Name":
@@ -177,47 +160,56 @@ for url in page_links:
                     mileage = right_element.text.strip()
                 if left_element and left_element.text.strip() == "Engine Type":
                     eng_type = right_element.text.strip()
-        my_price = soup.find('div', class_="price")
-        price = my_price.text.strip()
-        if price:
-            print('Цена:', my_price.text.strip())
-        else:
+        try:
+            my_price = soup.find('div', class_="price")
+            price = my_price.text.strip().replace('CN¥', '').replace('/unit', '').replace('/set', '').replace('/piece',
+                                                                                                              '').replace(
+                '/sheet', '')
+            if price:
+                logging.warning(price)
+            else:
+                price = None
+        except:
             price = None
-
-        print('xpath:', car_link)
+        logging.warning(car_url)
         if marka:
-            print("Марка машины:", marka)
+            logging.warning(marka)
         else:
             marka = 'Other'
         if model:
-            print('Модель:', model)
+            logging.warning(model)
         if year:
-            print("Год выпуска:", year)
+            logging.warning(year)
         if eco:
-            print("Экологический класс:", eco)
+            logging.warning(eco)
         if kuzov:
-            print("Кузов:", kuzov)
+            logging.warning(kuzov)
         if horse_power:
-            print("Лощадиные силы:", horse_power)
+            logging.warning(horse_power)
         if privod:
-            print("Привод:", privod)
+            logging.warning(privod)
         if kpp:
-            print('Коробка передачь:', kpp)
+            logging.warning(kpp)
         if kpp_type:
-            print('Тип коробки:', kpp_type)
+            logging.warning(kpp_type)
         if eng_v and not eng_info:
-            print(eng_v)
+            logging.warning(eng_v)
         if eng_info and not eng_v:
-            eng_v, hp, eng_type = eng_info.split(' ')
-            print('Информация о двигателе:', eng_info)
-            print(eng_v)
-            print(hp)
-            print(eng_type)
+            try:
+                eng_v, hp, eng_type = eng_info.split(' ')
+            except Exception:
+                eng_v = None
+                hp = None
+                eng_type = None
+            logging.warning(eng_info)
+            logging.warning(eng_v)
+            logging.warning(hp)
+            logging.warning(eng_type)
             if not horse_power:
                 horse_power = hp
 
         if mileage:
-            print('Пробег:', mileage)
+            logging.warning(mileage)
         with session_scope() as session:
             if marka and marka not in marks:
                 marks.append(marka)
@@ -226,57 +218,54 @@ for url in page_links:
                 table_image = create_car_image_table(f'{marka}_image')
                 tables_img[f'{marka}_image'] = table_image
                 create_all_tables()
-            rec = tables[marka](
-                xpath=car_url,
-                model=model,
-                year=year,
-                color=color,
-                kpp=kpp,
-                lot_city=lot_city,
-                mileage=mileage,
-                kuzov=kuzov,
-                eco=eco,
-                price=price,
-                eng_v=eng_v,
-                kpp_type=kpp_type,
-                horse_power=horse_power,
-                engine_type=eng_type,
-                privod=privod,
-                status=1
-            )
-            session.add(rec)
-            session.commit()
-            image_slider = soup.find('div', class_='thumb-list')
-            # print(image_slider)
-            image_tags = image_slider.find_all('div', class_='detail-next-slick-slide detail-next-slick-active main-item false')
-            # print(image_tags)
-            # print(image_tags)
-            for img_tag in image_tags:
-                # print(img_tag)
-                img = img_tag.find('img')
-                src = img['src']
-                # src = img_tag['src']
-                image_url = src.replace('100x100', '600x600')
-                print(image_url)
-                rec_image = tables_img[f'{marka}_image'](
-                    car_id=rec.id,
-                    image_url=image_url
-                )
-                session.add(rec_image)
-                session.commit()
-# if my_price:
-# print("Цена:", my_price.text.strip())
-# pagination_div = soup.find('div', class_='l-sub-main-wrap util-clearfix')
-# print(pagination_div)
-# cars = soup.find('div', class_='m-gallery-product-item')
-# if pagination_div:
-#     pagination_links = pagination_div.find_all('a')
-#
-#     links = []
-#     for link in pagination_links:
-#         links.append(link['href'])
-#
-#     for link in links:
-#         print(link)
-# else:
-#     print("Элемент 'ui2-pagination-pages' не найден.")
+                rec = session.query(table).filter_by(xpath=car_url).first()
+                if not rec:
+                    rec = tables[marka](
+                        xpath=car_url,
+                        model=model,
+                        year=year,
+                        color=color,
+                        kpp=kpp,
+                        lot_city=lot_city,
+                        mileage=mileage,
+                        kuzov=kuzov,
+                        eco=eco,
+                        price=price,
+                        eng_v=eng_v,
+                        kpp_type=kpp_type,
+                        horse_power=horse_power,
+                        engine_type=eng_type,
+                        privod=privod,
+                        status=1
+                    )
+                    session.add(rec)
+                    session.commit()
+                    try:
+                        image_tags = soup.find("div", class_="detail-next-slick-track").find_all("div",
+                                                                                                 class_="main-item")
+                        if not image_tags:
+                            image_tags = soup.find("div", class_="detail-next-slick-track").find_all("div",
+                                                                                                     class_="detail-next-slick-slide detail-next-slick-active main-item false")
+                    except Exception:
+                        image_slider = soup.find('div', class_='image-list-slider')
+                        image_tags = image_slider.find_all('img', class_='image-list-item')
+                    for img_tag in image_tags:
+                        try:
+                            img = img_tag.find('img')
+                            src = img['src']
+                            if not src:
+                                raise Exception
+                        except Exception:
+                            src = img_tag['src']
+                            if not src:
+                                scrapper.refresh_page()
+                                continue
+                        image_url = src.replace('140x140', '600x600').replace('100x100', '600x600')
+                        logging.warning(image_url)
+                        rec_image = tables_img[f'{marka}_image'](
+                            car_id=rec.id,
+                            image_url=image_url
+                        )
+                        session.add(rec_image)
+                        session.commit()
+                    logging.warning('car added succesfully')

@@ -1,6 +1,6 @@
 import re
 
-from database import session_scope, create_car_table, create_car_image_table, Car
+from database import session_scope, create_car_table, create_car_image_table
 from bs4 import BeautifulSoup as bs
 import requests
 from selenium_scrapper import SeleniumScraper
